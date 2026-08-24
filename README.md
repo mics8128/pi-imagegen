@@ -18,6 +18,14 @@ the Codex CLI.
 pi install npm:@mics8128/pi-imagegen
 ```
 
+For a project-local install, use `-l`; the first run must explicitly trust the
+project-local package configuration:
+
+```bash
+pi install npm:@mics8128/pi-imagegen -l
+pi --approve
+```
+
 Or for a one-off test:
 
 ```bash
@@ -65,7 +73,10 @@ still shows the saved file path. No extra configuration is needed.
 
 Settings are merged from (low → high priority):
 
-1. `~/.pi/agent/settings.json` (global; `$PI_AGENT_HOME/settings.json` when set)
+1. Host-global settings: `~/.pi/agent/settings.json` for pi, or
+   `~/.prime/agent/settings.json` for prime-agent. The corresponding
+   `PI_CODING_AGENT_DIR` or `PRIME_AGENT_CODING_AGENT_DIR` environment variable
+   overrides its host default.
 2. `<cwd>/.pi/settings.json` (project)
 
 `${ENV_VAR}` / `$ENV_VAR` interpolation is supported, so keys can come from the

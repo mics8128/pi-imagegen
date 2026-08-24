@@ -1,25 +1,56 @@
 name: Publish to npm
 
 on:
-  # Manual: Actions tab -> "Publish to npm" -> Run workflow
+  # Manual release: Actions tab -> "Release" -> choose a version bump.
+  # This creates and pushes the version tag; that tag starts the publish job.
   workflow_dispatch:
     inputs:
       bump:
-        description: "Version bump: patch | minor | major | none"
+        description: "Version bump"
+        type: choice
+        options: [patch, minor, major]
         default: patch
-        required: false
-  # Automatic: pushing a tag like v0.1.1 publishes that version
+        required: true
+  # Publishing only happens from a release tag. This prevents a manual release
+  # run and its tag-triggered run from publishing the same version twice.
   push:
     tags:
       - "v*"
 
 jobs:
-  publish:
+  release:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Bump, commit, and tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          npm version "$INPUT_BUMP" -m "chore: release %s"
+          git push origin main --follow-tags
+        env:
+          INPUT_BUMP: ${{ inputs.bump }}
+
+  publish:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
       # Required for npm Trusted Publishing (OIDC). No NPM_TOKEN secret needed.
       id-token: write
+    concurrency:
+      group: npm-publish-${{ github.ref_name }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
 
@@ -27,23 +58,12 @@ jobs:
         with:
           node-version: 24
 
-      # Trusted Publishing (OIDC) requires npm >= 11.5
+      # Trusted Publishing (OIDC) requires npm >= 11.5.
       - name: Ensure recent npm
         run: npm install -g npm@latest
 
-      - name: Bump version (workflow_dispatch only)
-        if: github.event_name == 'workflow_dispatch' && inputs.bump != 'none'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          npm version "$INPUT_BUMP" -m "chore: release %s"
-          git push
-          git push origin --tags
-        env:
-          INPUT_BUMP: ${{ inputs.bump }}
-
-      # Authenticates via GitHub OIDC. The package's Trusted Publisher on
-      # npmjs.com must list this repo + this workflow filename (publish.yml).
+      # Authenticates through GitHub OIDC. Configure the npm package's Trusted
+      # Publisher for mics8128/pi-imagegen and this file: publish.yml.
       - name: Publish
         run: npm publish --access public --provenance
 
