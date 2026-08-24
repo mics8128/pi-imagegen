@@ -1,0 +1,54 @@
+name: Publish to npm
+
+on:
+  # Manual: Actions tab -> "Publish to npm" -> Run workflow
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: "Version bump: patch | minor | major | none"
+        default: patch
+        required: false
+  # Automatic: pushing a tag like v0.1.1 publishes that version
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org/
+
+      - name: Configure npm auth
+        run: npm config set //registry.npmjs.org/:_authToken "$NPM_TOKEN"
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Bump version (workflow_dispatch only)
+        if: github.event_name == 'workflow_dispatch' && inputs.bump != 'none'
+        id: bump
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          NEW=$(npm version "$INPUT_BUMP" -m "chore: release %s")
+          echo "version=$NEW" >> "$GITHUB_OUTPUT"
+          git push
+          git push "origin" "$(git describe --tags --abbrev=0)"
+        env:
+          INPUT_BUMP: ${{ inputs.bump }}
+
+      - name: Publish
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Published version
+        run: npm view "$(node -p "require('./package.json').name")" version
