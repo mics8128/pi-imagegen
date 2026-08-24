@@ -1,0 +1,41 @@
+{
+  "name": "pi-imagegen",
+  "version": "0.1.0",
+  "description": "Pi extension for image generation: Codex (ChatGPT OAuth via pi, no Codex CLI) plus any OpenAI-compatible provider (llm-center, OpenAI, proxies).",
+  "license": "MIT",
+  "private": false,
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "codex",
+    "image-generation",
+    "openai-compatible"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mics8128/pi-imagegen.git"
+  },
+  "homepage": "https://github.com/mics8128/pi-imagegen#readme",
+  "bugs": {
+    "url": "https://github.com/mics8128/pi-imagegen/issues"
+  },
+  "files": [
+    "index.ts",
+    "extensions",
+    "lib",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@sinclair/typebox": "*"
+  },
+  "pi": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}
