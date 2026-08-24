@@ -15,14 +15,31 @@ the Codex CLI.
 ## Install
 
 ```bash
-pi install git:github.com/mics8128/pi-imagegen
+pi install npm:@mics8128/pi-imagegen
 ```
 
 Or for a one-off test:
 
 ```bash
-pi -e git:github.com/mics8128/pi-imagegen
+pi -e npm:@mics8128/pi-imagegen
 ```
+
+### pi vs prime-agent
+
+The same package works in both hosts — no separate publish. Each host keeps
+its own package list, so install once per host:
+
+- **pi**: `pi install npm:@mics8128/pi-imagegen` (writes to `~/.pi/agent`)
+- **prime-agent**: `prime-agent package install npm:@mics8128/pi-imagegen`
+  (writes to `~/.prime/agent`), or run either CLI with
+  `-e npm:@mics8128/pi-imagegen` for a one-off
+
+The extension detects the host config dir at runtime, so Codex OAuth tokens
+resolve from the right store in both cases.
+
+> Note: the unscoped npm name `pi-imagegen` is an **unrelated** package by
+> another author (github.com/Jon-Vii/pi-imagegen). This package is
+> `@mics8128/pi-imagegen` only.
 
 ## Use
 
@@ -36,6 +53,13 @@ imagegen({ prompt: "...", provider: "llm-center" })
 
 Generated images are saved to `.pi/images/` (configurable) and returned inline
 to the conversation.
+
+### TUI preview
+
+The tool returns images as native image content blocks, so pi / prime-agent
+render them inline in the TUI on terminals that support the Kitty graphics
+protocol (kitty, Ghostty, WezTerm). On unsupported terminals the tool result
+still shows the saved file path. No extra configuration is needed.
 
 ## Configure
 
