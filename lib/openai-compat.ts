@@ -1,4 +1,5 @@
 import type { ResolvedProvider } from "./config.js";
+import { hasRequestCredential } from "./host-auth.js";
 import { type GeneratedImage, readImageAsDataUrl, sniffMime } from "./util.js";
 
 export interface CompatGenerateOptions {
@@ -19,7 +20,9 @@ interface CompatImageItem {
 function providerHeaders(provider: ResolvedProvider): Record<string, string> {
   const headers: Record<string, string> = {};
   if (provider.apiKey) headers["authorization"] = `Bearer ${provider.apiKey}`;
-  for (const [k, v] of Object.entries(provider.headers ?? {})) headers[k.toLowerCase()] = v;
+  for (const [k, v] of Object.entries(provider.headers ?? {})) {
+    if (typeof v === "string") headers[k.toLowerCase()] = v;
+  }
   return headers;
 }
 
@@ -30,8 +33,13 @@ async function toImages(items: CompatImageItem[], signal?: AbortSignal): Promise
       const bytes = Buffer.from(item.b64_json, "base64");
       images.push({ base64: item.b64_json, mimeType: sniffMime(bytes) });
     } else if (item.url) {
-      const res = await fetch(item.url, { signal });
-      if (!res.ok) throw new Error(`Failed to download generated image from ${item.url}: HTTP ${res.status}`);
+      let res: Response;
+      try {
+        res = await fetch(item.url, { signal });
+      } catch {
+        throw new Error("Failed to download generated image.");
+      }
+      if (!res.ok) throw new Error(`Failed to download generated image: HTTP ${res.status}`);
       const bytes = new Uint8Array(await res.arrayBuffer());
       images.push({ base64: Buffer.from(bytes).toString("base64"), mimeType: res.headers.get("content-type") ?? sniffMime(bytes) });
     }
@@ -41,10 +49,19 @@ async function toImages(items: CompatImageItem[], signal?: AbortSignal): Promise
 
 /** Generate images through any OpenAI-compatible /v1/images API (llm-center, OpenAI, proxies). */
 export async function generateViaOpenAiCompat(provider: ResolvedProvider, opts: CompatGenerateOptions): Promise<{ images: GeneratedImage[]; text: string }> {
-  if (!provider.apiKey) {
-    throw new Error(`Provider "${provider.name}" has no apiKey. Set "${provider.name}.apiKey" (supports ${"$"}{ENV_VAR}) in the pi-imagegen settings.`);
-  }
   const base = (provider.baseUrl ?? "").replace(/\/+$/, "");
+  if (!base) {
+    throw new Error(
+      `Provider "${provider.name}" has no baseUrl. Set "${provider.name}.baseUrl" in pi-imagegen settings, ` +
+        "or use authProvider with a host credential that supplies one.",
+    );
+  }
+  if (!hasRequestCredential(provider)) {
+    throw new Error(
+      `Provider "${provider.name}" has no request credential. Set apiKey (supports ${"$"}{ENV_VAR}) ` +
+        "or configure authProvider to reuse a pi / prime-agent provider credential.",
+    );
+  }
   const headers = providerHeaders(provider);
 
   let response: Response;
@@ -81,13 +98,14 @@ export async function generateViaOpenAiCompat(provider: ResolvedProvider, opts: 
   }
 
   if (!response.ok) {
-    const errorText = await response.text().catch(() => "");
-    throw new Error(`Provider "${provider.name}" returned HTTP ${response.status}: ${errorText.slice(0, 500)}`);
+    // An upstream proxy can echo request credentials. Never place its body in a tool error.
+    throw new Error(`Provider "${provider.name}" returned HTTP ${response.status}.`);
   }
   const payload = await response.json().catch(() => null) as any;
   const items: CompatImageItem[] = payload?.data;
   if (!Array.isArray(items) || items.length === 0) {
-    throw new Error(`Provider "${provider.name}" returned no image data: ${JSON.stringify(payload).slice(0, 300)}`);
+    // Payload fields may contain proxy diagnostics or echoed credentials; keep errors structural.
+    throw new Error(`Provider "${provider.name}" returned no image data.`);
   }
   return { images: await toImages(items, opts.signal), text: "" };
 }

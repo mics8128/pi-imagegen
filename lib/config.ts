@@ -6,6 +6,8 @@ export type ProviderType = "codex-oauth" | "openai-compatible";
 
 export interface ProviderConfig {
   type?: ProviderType;
+  /** Reuse credentials already resolved by pi / prime-agent for this provider. */
+  authProvider?: string;
   baseUrl?: string;
   apiKey?: string;
   model?: string;
@@ -92,6 +94,8 @@ export class ConfigError extends Error {}
 export interface ResolvedProvider {
   name: string;
   type: ProviderType;
+  /** Optional pi / prime-agent provider whose request credentials are reused. */
+  authProvider?: string;
   baseUrl?: string;
   apiKey?: string;
   model?: string;
@@ -104,15 +108,17 @@ export function resolveProvider(config: ImageGenConfig, name?: string): Resolved
   const providerName = name?.trim() || config.defaultProvider?.trim() || "codex";
   const configured = config.providers?.[providerName];
   const type: ProviderType = configured?.type ?? (providerName === "codex" ? "codex-oauth" : "openai-compatible");
-  if (type === "openai-compatible" && !configured?.baseUrl) {
+  if (type === "openai-compatible" && !configured?.baseUrl && !configured?.authProvider?.trim()) {
     throw new ConfigError(
       `Provider "${providerName}" is openai-compatible but has no baseUrl. ` +
-        `Add it to settings under "${CONFIG_KEY}.providers.${providerName}.baseUrl".`,
+        `Add it to settings under "${CONFIG_KEY}.providers.${providerName}.baseUrl", ` +
+        `or set authProvider to reuse a host provider that supplies one.`,
     );
   }
   return {
     name: providerName,
     type,
+    authProvider: configured?.authProvider?.trim() || undefined,
     baseUrl: configured?.baseUrl,
     apiKey: configured?.apiKey,
     model: configured?.model,

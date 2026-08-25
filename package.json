@@ -4,6 +4,10 @@
   "description": "Pi extension for image generation: Codex (ChatGPT OAuth via pi, no Codex CLI) plus any OpenAI-compatible provider (llm-center, OpenAI, proxies).",
   "license": "MIT",
   "private": false,
+  "type": "module",
+  "scripts": {
+    "test": "node --test test/*.test.ts"
+  },
   "keywords": [
     "pi-package",
     "pi-extension",
@@ -37,5 +41,8 @@
     "extensions": [
       "./index.ts"
     ]
+  },
+  "devDependencies": {
+    "jiti": "^2.7.0"
   }
 }

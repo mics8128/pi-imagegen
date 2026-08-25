@@ -1,15 +1,13 @@
-import { execFile } from "node:child_process";
 import { access } from "node:fs/promises";
-import { promisify } from "node:util";
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { Type, type Static } from "@sinclair/typebox";
 import { CONFIG_KEY, DEFAULT_OUTPUT_DIR, loadImageGenConfig, resolveProvider } from "../lib/config.js";
 import { getCodexCredentials, generateViaCodex } from "../lib/codex-oauth.js";
+import { hasRequestCredential, resolveHostProviderAuth } from "../lib/host-auth.js";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { generateViaOpenAiCompat } from "../lib/openai-compat.js";
 import { resolveUserPath, saveImage } from "../lib/util.js";
 
-const execFileAsync = promisify(execFile);
 
 const TOOL_NAME = "imagegen";
 const TOOL_LABEL = "ImageGen";
@@ -81,8 +79,11 @@ export default async function imageGen(pi: ExtensionAPI) {
     ],
     parameters: TOOL_PARAMS,
     async execute(_toolCallId, params: ToolParams, signal, _onUpdate, ctx) {
-      const { config, sources } = loadImageGenConfig();
-      const provider = resolveProvider(config, params.provider);
+      const { config } = loadImageGenConfig();
+      let provider = resolveProvider(config, params.provider);
+      if (provider.type === "openai-compatible") {
+        provider = await resolveHostProviderAuth(provider, ctx);
+      }
 
       const inputImages = (params.inputImages ?? []).slice(0, MAX_INPUT_IMAGES);
       const resolvedInputImages: string[] = [];
@@ -187,18 +188,48 @@ export default async function imageGen(pi: ExtensionAPI) {
 
       let codexOk = false;
       try {
-        const { stdout } = await execFileAsync("pi", ["auth", "check", "--provider", "openai-codex", "--json"], { timeout: 30_000 });
-        const status = JSON.parse(stdout);
-        codexOk = status?.status === "ready";
-        lines.push(`Codex OAuth (pi): ${codexOk ? "ready" : stdout.trim()}`);
-      } catch (error) {
-        lines.push(`Codex OAuth (pi): unavailable — ${(error as Error).message.split("\n")[0]}`);
+        await getCodexCredentials({
+          authPath: config.authPath,
+          resolveToken: await resolveCodexToken(ctx),
+        });
+        codexOk = true;
+        lines.push("Codex OAuth (host): ready");
+      } catch {
+        lines.push("Codex OAuth (host): unavailable");
       }
 
-      const summary = codexOk || providerNames.length > 0
+      let customProviderOk = false;
+      for (const providerName of providerNames) {
+        let configured;
+        try {
+          configured = resolveProvider(config, providerName);
+          if (configured.type === "codex-oauth") {
+            lines.push(`Provider "${providerName}": uses Codex OAuth shown above`);
+            continue;
+          }
+          const effective = await resolveHostProviderAuth(configured, ctx);
+          if (!effective.baseUrl) {
+            lines.push(`Provider "${providerName}": unavailable — no baseUrl`);
+          } else if (!hasRequestCredential(effective)) {
+            lines.push(`Provider "${providerName}": unavailable — no request credential`);
+          } else {
+            customProviderOk = true;
+            const source = configured.authProvider
+              ? `host credential provider "${configured.authProvider}"`
+              : "configured API credential";
+            lines.push(`Provider "${providerName}": ready (${source})`);
+          }
+        } catch {
+          const source = configured?.authProvider ? `host credential provider "${configured.authProvider}"` : "configuration";
+          lines.push(`Provider "${providerName}": unavailable — ${source} could not be resolved`);
+        }
+      }
+
+      const ready = codexOk || customProviderOk;
+      const summary = ready
         ? "pi-imagegen: ready"
-        : "pi-imagegen: no provider ready — login to pi with the openai-codex provider or configure a provider in settings";
-      ctx.ui.notify(summary, codexOk || providerNames.length > 0 ? "success" : "warning");
+        : "pi-imagegen: no provider ready — login to the Codex provider or configure an authenticated image provider";
+      ctx.ui.notify(summary, ready ? "success" : "warning");
       await ctx.ui.select("pi-imagegen doctor", [...lines, "", "Press Esc to close"]);
     },
   });

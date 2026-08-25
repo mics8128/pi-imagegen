@@ -2,7 +2,8 @@ name: Publish to npm
 
 on:
   # Manual release: Actions tab -> "Release" -> choose a version bump.
-  # This creates and pushes the version tag; that tag starts the publish job.
+  # GitHub does not trigger a second workflow from a tag pushed with GITHUB_TOKEN,
+  # so this release job publishes directly after it pushes the version tag.
   workflow_dispatch:
     inputs:
       bump:
@@ -11,8 +12,8 @@ on:
         options: [patch, minor, major]
         default: patch
         required: true
-  # Publishing only happens from a release tag. This prevents a manual release
-  # run and its tag-triggered run from publishing the same version twice.
+  # A tag pushed by a user or another trusted tool publishes through the tag job.
+  # Tags created by this workflow are already published by the release job above.
   push:
     tags:
       - "v*"
@@ -23,6 +24,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      # Required for npm Trusted Publishing (OIDC). No NPM_TOKEN secret needed.
+      id-token: write
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,6 +35,11 @@ jobs:
         with:
           node-version: 24
 
+      - name: Install and test
+        run: |
+          npm install --ignore-scripts
+          npm test
+
       - name: Bump, commit, and tag
         run: |
           git config user.name "github-actions[bot]"
@@ -40,6 +48,17 @@ jobs:
           git push origin main --follow-tags
         env:
           INPUT_BUMP: ${{ inputs.bump }}
+
+      # The tag above was pushed with GITHUB_TOKEN, which intentionally cannot
+      # trigger the tag workflow. Publish this manual release in the same OIDC job.
+      - name: Ensure recent npm
+        run: npm install -g npm@latest
+
+      - name: Publish
+        run: npm publish --access public --provenance
+
+      - name: Published version
+        run: npm view "$(node -p "require('./package.json').name")" version
 
   publish:
     if: github.event_name == 'push'
@@ -57,6 +76,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 24
+
+      - name: Install and test
+        run: |
+          npm install --ignore-scripts
+          npm test
 
       # Trusted Publishing (OIDC) requires npm >= 11.5.
       - name: Ensure recent npm

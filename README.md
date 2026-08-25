@@ -94,14 +94,26 @@ environment.
       },
       "llm-center": {
         "type": "openai-compatible",
-        "baseUrl": "https://your-llm-center.example.com/v1",
-        "apiKey": "${LLMC_API_KEY}",
-        "model": "gpt-image-1"
+        "authProvider": "llm-esapp",
+        "baseUrl": "https://llm.esapp.net/v1",
+        "model": "gpt-image-2"
       }
     }
   }
 }
 ```
+
+### Reuse pi / prime-agent credentials
+
+For an OpenAI-compatible provider, `authProvider` uses the credential already
+resolved by the current host's `modelRegistry`. The example above therefore
+uses the logged-in `llm-esapp` credential without an environment variable or
+an API key in `settings.json`.
+
+The host-supplied API key, headers, and base URL fill missing values. An
+explicit `baseUrl` or header in `pi-imagegen` settings overrides the matching
+host value, which lets one host credential be used through a chosen proxy.
+If no `authProvider` is set, use `apiKey` as before.
 
 ### Provider fields
 
@@ -109,10 +121,11 @@ environment.
 | --- | --- | --- |
 | `type` | `"codex-oauth"` (default for provider `codex`) | `"openai-compatible"` (default for any other name) |
 | `model` | e.g. `gpt-5.6-luna` | e.g. `gpt-image-1` |
-| `baseUrl` | optional override (default `https://chatgpt.com/backend-api`) | **required**, e.g. `https://host/v1` |
-| `apiKey` | not used (pi OAuth) | **required**, supports `${ENV_VAR}` |
+| `baseUrl` | optional override (default `https://chatgpt.com/backend-api`) | required unless `authProvider` supplies it; e.g. `https://host/v1` |
+| `authProvider` | not used | optional existing pi / prime-agent provider name, e.g. `"llm-esapp"` |
+| `apiKey` | not used (pi OAuth) | optional when `authProvider` supplies request auth; otherwise supports `${ENV_VAR}` |
 | `size` / `quality` | optional defaults | optional defaults |
-| `headers` | optional extra headers | optional extra headers |
+| `headers` | optional extra headers | optional extra headers; explicit values override host-provided values |
 
 ### Codex auth
 
@@ -127,7 +140,7 @@ like normal pi usage.
 
 ## Commands
 
-- `/imagegen-doctor` — check settings, configured providers, and Codex OAuth readiness.
+- `/imagegen-doctor` — check settings, configured providers, host-managed credential providers, and Codex OAuth readiness.
 
 ## Requirements
 
