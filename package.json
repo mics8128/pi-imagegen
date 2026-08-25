@@ -1,6 +1,6 @@
 {
   "name": "@mics8128/pi-imagegen",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Pi extension for image generation: Codex (ChatGPT OAuth via pi, no Codex CLI) plus any OpenAI-compatible provider (llm-center, OpenAI, proxies).",
   "license": "MIT",
   "private": false,
